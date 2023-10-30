@@ -516,3 +516,157 @@ distance := Point.Distance   // method expression
 fmt.Println(distance(p, q))  // "5"
 fmt.Printf("%T\n", distance) // "func(Point, Point) float64"
 ```
+
+## Interfaces
+
+An interface is an *abstract type*. It doesn’t expose the representation or internal structure of its values, or the set
+of basic operations they support; it reveals only some of their methods. When you have a value of an interface type, you
+know nothing about what it is; you know only what it can do, or more precisely, what behaviors are provided by its
+methods.
+
+```
+type Reader interface {
+    Read(p []byte) (n int, err error)
+}
+
+type Closer interface {
+    Close() error
+}
+```
+
+*Embedding* an interface:
+
+```
+type ReadWriter interface {
+    Reader
+    Writer
+}
+
+type ReadWriteCloser interface {
+    Reader
+    Writer
+    Closer
+}
+```
+
+The type `interface{}`, which is called the ***empty interface*** type, is indispensable. Because the empty interface
+type places no demands on the types that satisfy it, we can assign any value to the empty interface.
+
+---
+
+## Goroutines and Channels
+
+Go enables two styles of concurrent programming:
+
+- ***Communicating sequential processes*** or ***CSP***, a model of concurrency in which values are passed between
+  independent activities (goroutines) but variables are for the most part confined to a single activity.
+- More traditional model of ***shared memory multithreading***, which will be familiar if you’ve used threads in other
+  mainstream languages.
+
+### Goroutines
+
+In Go, each concurrently executing activity is called a ***goroutine***. When a program starts, its only goroutine is
+the one that calls the main function, so we call it the *main goroutine*.
+
+New goroutines are created by the `go` statement. Syntactically, a `go` statement is an ordinary function or method call
+prefixed by the keyword `go`. A go statement causes the function to be called in a newly created goroutine. The `go`
+statement itself completes immediately:
+
+```
+f()    // call f(); wait for it to return
+go f() // create a new goroutine that calls f(); don't wait
+```
+
+### Channels
+
+If goroutines are the activities of a concurrent Go program, channels are the connections between them. A channel is a
+communication mechanism that lets one goroutine send values to another goroutine. Each channel is a conduit for values
+of a particular type, called the channel’s element type. The type of a channel whose elements have type int is written
+chan int.
+To create a channel, we use the built-in make function:
+
+```
+ch := make(chan int) // ch has type 'chan int'
+```
+
+As with maps, a channel is a reference to the data structure created by make. When we copy a channel or pass one as an
+argument to a function, we are copying a reference, so caller and callee refer to the same data structure. As with other
+reference types, the zero value of a channel is nil.
+
+A channel has two principal operations, *send* and *receive*, collectively known as *communications*.
+
+```
+ch <- x   // a send statement
+x = <-ch  // a receive expression in an assignment statement
+<-ch      // a receive statement; result is discarded
+close(ch) // closing channel; attempts to send anything to it will cause panic 
+```
+
+#### Unbuffered Channels
+
+A send operation on an unbuffered channel blocks the sending goroutine until another goroutine executes a corresponding
+receive on the same channel, at which point the value is transmitted and both goroutines may continue. Conversely, if
+the receive operation was attempted first, the receiving goroutine is blocked until another goroutine performs a send on
+the same channel.
+
+Communication over an unbuffered channel causes the sending and receiving goroutines to synchronize. Because of this,
+unbuffered channels are sometimes called synchronous channels.
+
+#### Unidirectional Channel Types
+
+The Go type system provides unidirectional channel types that expose only one or the other of the send and receive
+operations.
+
+- The type `chan<- int`, a send-only channel of int, allows sends but not receives.
+- The type `<-chan int`, a receive-only channel of int, allows receives but not sends.
+
+Violations of this discipline are detected at compile time.
+
+Since the `close` operation asserts that no more sends will occur on a channel, only the sending goroutine is in a
+position to call it, and for this reason it is a compile-time error to attempt to `close` a receive-only channel.
+
+#### Buffered Channels
+
+A buffered channel has a queue of elements. The queue’s maximum size is determined when it is created, by the capacity
+argument to `make`.
+
+```
+ch = make(chan string, 3)
+```
+
+A send operation on a buffered channel inserts an element at the back of the queue, and a receive operation removes an
+element from the front. If the channel is full, the send operation blocks its goroutine until space is made available by
+another goroutine’s receive. Conversely, if the channel is empty, a receive operation blocks until a value is sent by
+another goroutine.
+
+### Multiplexing with select
+
+General form of `select` statement:
+
+```
+select {
+     case <-ch1:
+         // ...
+     case x := <-ch2:
+         // ...use x...
+     case ch3 <- y:
+         // ...
+     default:
+}
+```
+
+Example:
+
+```
+ch := make(chan int, 1)
+     for i := 0; i < 10; i++ {
+         select {
+         case x := <-ch:
+             fmt.Println(x) // "0" "2" "4" "6" "8"
+         case ch <- i:
+    }
+}
+```
+
+If multiple cases are ready, select picks one at random, which ensures that every channel has an equal chance of being
+selected.
