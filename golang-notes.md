@@ -9,10 +9,11 @@
 3. [Composite Types](#composite-types)
 4. [Functions](#functions)
 5. [Methods](#methods)
-6. [Goroutines and Channels](#goroutines-and-channels)
-7. [Concurrency with Shared Variables](#concurrency-with-shared-variables)
-8. [Packages and the Go Tool](#packages-and-the-go-tool)
-9. [Testing](#testing)
+6. [Interfaces](#interfaces)
+7. [Goroutines and Channels](#goroutines-and-channels)
+8. [Concurrency with Shared Variables](#concurrency-with-shared-variables)
+9. [Packages and the Go Tool](#packages-and-the-go-tool)
+10. [Testing](#testing)
 
 ---
 
@@ -532,6 +533,8 @@ distance := Point.Distance   // method expression
 fmt.Println(distance(p, q))  // "5"
 fmt.Printf("%T\n", distance) // "func(Point, Point) float64"
 ```
+
+---
 
 ## Interfaces
 
