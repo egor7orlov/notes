@@ -670,3 +670,374 @@ ch := make(chan int, 1)
 
 If multiple cases are ready, select picks one at random, which ensures that every channel has an equal chance of being
 selected.
+
+---
+
+## Concurrency with Shared Variables
+
+### Race Conditions
+
+In a program with two or more goroutines, the steps within each goroutine happen in the familiar order, but in general
+we don’t know whether an event x in one goroutine happens before an event y in another goroutine, or happens after it,
+or is simultaneous with it. When we cannot confidently say that one event happens before the other, then the events x
+and y are *concurrent*.
+
+A ***race condition*** is a situation in which the program does not give the correct result for some interleavings of
+the operations of multiple goroutines. Race conditions are pernicious because they may remain latent in a program and
+appear infrequently, perhaps only under heavy load or when using certain compilers, platforms, or architectures.
+
+A *data race* occurs whenever two goroutines access the same variable concurrently and at least one of the accesses is a
+write.
+
+### Mutual Exclusion: sync.Mutex
+
+The *mutex* prevents the shared variables from being simultaneously accessed by multiple goroutines.
+
+```
+import "sync"
+
+var (
+    mu      sync.Mutex
+    balance int
+)
+
+func Deposit(amount int) {
+    mu.Lock()
+    balance = balance + amount
+    mu.Unlock()
+}
+
+func Balance() int {
+    mu.Lock()
+    b := balance
+    mu.Unlock()
+    return b
+}
+```
+
+The region of code between Lock and Unlock in which a goroutine is free to read and modify the shared variables is
+called a ***critical section***.
+
+> By convention, the variables guarded by a mutex are declared immediately after the declaration of the mutex itself. If
+> you deviate from this, be sure to document it.
+
+When dealing with more complex logic it's better to release mutex using `defer` statement. The Unlock executes after the
+return statement has read the value of balance, so the Balance function is concurrency-safe.
+
+```
+func Balance() int {
+    mu.Lock()
+    defer mu.Unlock()
+    
+    // ... Super complex logic  with branching and error handling goes here 
+    
+    return balance
+}
+```
+
+### Read/Write Mutexes: sync.RWMutex
+
+Since the Balance function only needs to read the state of the variable, it would in fact be safe for multiple Balance
+calls to run concurrently, so long as no Deposit or Withdraw call is running. In this scenario we need a special kind
+of lock that allows read-only operations to proceed in parallel with each other, but write operations to have fully
+exclusive access. This lock is called a *multiple readers, single writer* lock, and in Go it’s provided by sync.RWMutex:
+
+```
+var mu sync.RWMutex
+var balance int
+
+func Balance() int {
+    mu.RLock() // readers lock
+    defer mu.RUnlock()
+    return balance
+}
+```
+
+The Balance function now calls the RLock and RUnlock methods to acquire and release a readers or shared lock. The
+Deposit function, which is unchanged, calls the mu.Lock and mu.Unlock methods to acquire and release a writer or
+exclusive lock.
+
+### Memory Synchronization
+
+There are two reasons we need a mutex. The first is that it’s equally important that Balance not execute in the middle
+of some other operation like Withdraw. The second (and more subtle) reason is that synchronization is about more than
+just the order of execution of multiple goroutines; synchronization also affects memory.
+
+In a modern computer there may be dozens of processors, each with its own local cache of the main memory. For
+efficiency, writes to memory are buffered within each processor and flushed out to main memory only when necessary. They
+may even be committed to main memory in a different order than they were written by the writing goroutine.
+Synchronization primitives like channel communications and mutex operations cause the processor to flush out and commit
+all its accumulated writes so that the effects of goroutine execution up to that point are guaranteed to be visible to
+goroutines running on other processors.
+
+### Goroutines and Threads
+
+#### Growable Stacks
+
+Each OS thread has a fixed-size block of memory (often as large as 2MB) for its stack, the work area where it saves the
+local variables of function calls that are in progress or temporarily suspended while another function is called.
+
+In contrast, a goroutine starts life with a small stack, typically 2KB. A goroutine’s stack, like the stack of an OS
+thread, holds the local variables of active and suspended function calls, but unlike an OS thread, a goroutine’s stack
+is not fixed; it grows and shrinks as needed.
+
+#### Goroutine Scheduling
+
+OS threads are scheduled by the OS kernel. Every few milliseconds, a hardware timer interrupts the processor, which
+causes a kernel function called the scheduler to be invoked. This function suspends the currently executing thread and
+saves its registers in memory, looks over the list of threads and decides which one should run next, restores that
+thread’s registers from memory, then resumes the execution of that thread. Because OS threads are scheduled by the
+kernel, passing control from one thread to another requires a full context switch, that is, saving the state of one user
+thread to memory, restoring the state of another, and updating the scheduler’s data structures. This operation is slow,
+due to its poor locality and the number of memory accesses required, and has historically only gotten worse as the
+number of CPU cycles required to access memory has increased.
+
+The Go runtime contains its own scheduler that uses a technique known as m:n scheduling, because it multiplexes (or
+schedules) m goroutines on n OS threads. The job of the Go scheduler is analogous to that of the kernel scheduler, but
+it is concerned only with the goroutines of a single Go program. Unlike the operating system’s thread scheduler, the Go
+scheduler is not invoked periodically by a hardware timer, but implicitly by certain Go language constructs.
+
+#### GOMAXPROCS
+
+The Go scheduler uses a parameter called GOMAXPROCS to determine how many OS threads may be actively executing Go code
+simultaneously. Its default value is the number of CPUs on the machine, so on a machine with 8 CPUs, the scheduler will
+schedule Go code on up to 8 OS threads at once. (GOMAXPROCS is the n in m:n scheduling.) Goroutines that are sleeping or
+blocked in a communication do not need a thread at all. Goroutines that are blocked in I/O or other system calls or are
+calling non-Go functions, do need an OS thread, but GOMAXPROCS need not account for them.
+
+#### Goroutines Have No Identity
+
+In most operating systems and programming languages that support multithreading, the current thread has a distinct
+identity that can be easily obtained as an ordinary value, typically an integer or pointer. This makes it easy to build
+an abstraction called thread-local storage, which is essentially a global map keyed by thread identity, so that each
+thread can store and retrieve values independent of other threads.
+
+Goroutines have no notion of identity that is accessible to the programmer. This is by design, since thread-local
+storage tends to be abused.
+
+---
+
+## Packages and the Go Tool
+
+### Import Paths
+
+Each package is identified by a unique string called its import path. Import paths are the strings that appear in import
+declarations:
+
+```
+import (
+    "fmt"
+    "math/rand"
+    "encoding/json"
+    "golang.org/x/net/html"
+    "github.com/go-sql-driver/mysql"
+)
+```
+
+### The Package Declaration
+
+A package declaration is required at the start of every Go source file. Its main purpose is to determine the default
+identifier for that package (called the package name) when it is imported by another package.
+
+For example, every file of the math/rand package starts with package rand, so when you import this package, you can
+access its members as rand.Int, rand.Float64, and so on.
+
+```
+package main
+
+import (
+	"fmt"
+	"math/rand"
+)
+
+func main() {
+	fmt.Println(rand.Int())
+}
+```
+
+Conventionally, the package name is the last segment of the import path, and as a result, two packages may have the same
+name even though their import paths necessarily differ.
+
+There are three major exceptions to the "last segment" convention:
+
+- The first is that a package defining a command (an executable Go program) always has the name main, regardless of the
+  package’s import path.
+- The second exception is that some files in the directory may have the suffix _test on their package name if the file
+  name ends with _test.go. Such a directory may define two packages: the usual one, plus another one called an external
+  test package.
+- The third exception is that some tools for dependency management append version number suffixes to package import
+  paths, such as "gopkg.in/yaml.v2". The package name excludes the suffix, so in this case it would be just yaml.
+
+### Import Declarations
+
+A Go source file may contain zero or more import declarations immediately after the package declaration and before the
+first non-import declaration.
+
+If we need to import two packages whose names are the same, like math/rand and crypto/rand, into a third package, the
+import declaration must specify an alternative name for at least one of them to avoid a conflict. This is called a
+renaming import.
+
+```
+import (
+    "crypto/rand"
+    mrand "math/rand" // alternative name mrand avoids conflict
+)
+```
+
+The alternative name affects only the importing file. Other files, even ones in the same package, may import the package
+using its default name, or a different name.
+
+### Blank Imports
+
+To suppress the "unused import" error we would otherwise encounter, we must use a renaming import in which the
+alternative name is _, the blank identifier. As usual, the blank identifier can never be referenced.
+
+```
+import (
+    "database/sql"
+    _ "github.com/lib/pq"              // enable support for Postgres
+    _ "github.com/go-sql-driver/mysql" // enable support for MySQL
+)
+
+// ...
+
+db, err = sql.Open("postgres", dbname) // OK
+db, err = sql.Open("mysql", dbname)    // OK
+db, err = sql.Open("sqlite3", dbname)  // returns error: unknown driver "sqlite3"
+```
+
+---
+
+## Testing
+
+### The `go test` Tool
+
+The go test subcommand is a test driver for Go packages that are organized according to certain conventions. In a
+package directory, files whose names end with _test.go are not part of the package ordinarily built by go build but are
+a part of it when built by go test.
+
+Within *_test.go files, three kinds of functions are treated specially: tests, benchmarks, and examples.
+
+- A test function, which is a function whose name begins with Test, exercises some program logic for correct behavior;
+  go test calls the test function and reports the result, which is either PASS or FAIL.
+- A benchmark function has a name beginning with Benchmark and measures the performance of some operation; go test
+  reports the mean execution time of the operation.
+- An example function, whose name starts with Example, provides machine-checked documentation.
+
+### Test Functions
+
+Each test file must import the testing package. Test functions have the following signature:
+
+```
+func TestName(t *testing.T) {
+  // ...
+}
+```
+
+Test function names must begin with Test; the optional suffix Name must begin with a capital letter:
+
+```
+func TestSin(t *testing.T) { /* ... */ }
+func TestCos(t *testing.T) { /* ... */ }
+func TestLog(t *testing.T) { /* ... */ }
+```
+
+### Benchmark Functions
+
+a benchmark function looks like a test function, but with the Benchmark prefix and a *testing.B parameter that provides
+most of the same methods as a *testing.T, plus a few extra related to performance measurement. It also exposes an
+integer field N, which specifies the number of times to perform the operation being measured.
+
+```
+import "testing"
+
+func BenchmarkIsPalindrome(b *testing.B) {
+    for i := 0; i < b.N; i++ {
+        IsPalindrome("A man, a plan, a canal: Panama")
+    }
+}
+```
+
+Unlike tests, by default no benchmarks are run. The argument to the -bench flag selects which benchmarks to run. It is a
+regular expression matching the names of Benchmark functions, with a default value that matches none of them. The ‘‘.’’
+pattern causes it to match all benchmarks.
+
+```
+$ go test -bench=.
+```
+
+### Profiling
+
+When we wish to look carefully at the speed of our programs, the best technique for identifying the critical code is
+profiling. Profiling is an automated approach to performance measurement based on sampling a number of profile events
+during execution, then extrapolating from them during a post-processing step; the resulting statistical summary is
+called a profile.
+
+- A ***CPU profile*** identifies the functions whose execution requires the most CPU time. The currently running thread
+  on each CPU is interrupted periodically by the operating system every few milliseconds, with each interruption
+  recording one profile event before normal execution resumes.
+- A ***heap profile*** identifies the statements responsible for allocating the most memory. The profiling library
+  samples calls to the internal memory allocation routines so that on average, one profile event is recorded per 512KB
+  of allocated memory.
+- A ***blocking profile*** identifies the operations responsible for blocking goroutines the longest, such as system
+  calls, channel sends and receives, and acquisitions of locks. The profiling library records an event every time a
+  goroutine is blocked by one of these operations.
+
+Gathering a profile for code under test is as easy as enabling one of the flags below. Be careful when using more than
+one flag at a time, however: the machinery for gathering one kind of profile may skew the results of others.
+
+```
+$ go test -cpuprofile=cpu.out
+$ go test -blockprofile=block.out
+$ go test -memprofile=mem.out
+```
+
+Once we’ve gathered a profile, we need to analyze it using the `pprof` tool. This is a standard part of the Go
+distribution, but since it’s not an everyday tool, it’s accessed indirectly using `go tool pprof`. It has dozens of
+features and options, but basic use requires only two arguments, the executable that produced the profile and the
+profile log.
+
+> `go test` usually discards the test executable once the test is complete, when profiling is enabled it saves the
+> executable as "foo.test", where foo is the name of the tested package.
+
+The commands below show how to gather and display a simple CPU profile. We’ve selected one of the benchmarks from
+the `net/http` package. It is usually better to profile specific benchmarks that have been constructed to be
+representative of workloads one cares about. Benchmarking test cases is almost never representative, which is why we
+disabled them by using the filter `-run=NONE`.
+
+```
+$ go test -run=NONE -bench=ClientServerParallelTLS64 -cpuprofile=cpu.log net/http
+$ go tool pprof -text -nodecount=10 ./http.test cpu.log
+```
+
+### Example Functions
+
+The third kind of function treated specially by go test is an example function, one whose name starts with Example. It
+has neither parameters nor results. Here’s an example function for `IsPalindrome`:
+
+```
+func ExampleIsPalindrome() {
+    fmt.Println(IsPalindrome("A man, a plan, a canal: Panama"))
+    fmt.Println(IsPalindrome("palindrome"))
+    // Output:
+    // true
+    // false
+}
+```
+
+Example functions serve three purposes:
+
+- Documentation: a good example can be a more succinct or intuitive way to convey the behavior of a library function
+  than its prose description, especially when used as a reminder or quick reference. Based on the suffix of the Example
+  function, the web-based documentation server godoc associates example functions with the function or package they
+  exemplify, so ExampleIsPalindrome would be shown with the documentation for the IsPalindrome function, and an example
+  function called just Example would be associated with the word package as a whole.
+- Examples are executable tests run by go test. If the example function contains a final `// Output:` comment like the
+  one above, the test driver will execute the function and check that what it printed to its standard output matches the
+  text within the comment.
+- The third purpose of an example is hands-on experimentation. The godoc server at golang.org uses the Go Playground to
+  let the user edit and run each example function from within a web browser.
+
+---
+
+## Reflection
