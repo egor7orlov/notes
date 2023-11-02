@@ -1039,7 +1039,3 @@ Example functions serve three purposes:
   text within the comment.
 - The third purpose of an example is hands-on experimentation. The godoc server at golang.org uses the Go Playground to
   let the user edit and run each example function from within a web browser.
-
----
-
-## Reflection
