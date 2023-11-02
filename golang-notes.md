@@ -2,6 +2,20 @@
 
 ---
 
+## Table of contents
+
+1. [Types](#types)
+2. [Basic types](#basic-types)
+3. [Composite Types](#composite-types)
+4. [Functions](#functions)
+5. [Methods](#methods)
+6. [Goroutines and Channels](#goroutines-and-channels)
+7. [Concurrency with Shared Variables](#concurrency-with-shared-variables)
+8. [Packages and the Go Tool](#packages-and-the-go-tool)
+9. [Testing](#testing)
+
+---
+
 ## Types
 
 Go’s types fall into four categories:
@@ -10,6 +24,8 @@ Go’s types fall into four categories:
 - aggregate types
 - reference types
 - interface types
+
+---
 
 ## Basic types
 
