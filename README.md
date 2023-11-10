@@ -2,4 +2,4 @@
 
 ## Contents
 
-- [Notes on Go programming language](golang-notes.md)
+- [Notes on Go programming language](programming-languages/golang-notes.md)
