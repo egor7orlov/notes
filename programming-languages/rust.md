@@ -2,9 +2,22 @@
 
 ---
 
+## Table of contents
+
+1. [Common Programming Concepts](#common-programming-concepts)
+   1. [Variables and Mutability](#variables-and-mutability)
+   2. [Data Types](#data-types)
+   3. [Functions](#functions)
+   4. [Control Flow](#control-flow)
+2. [Understanding Ownership](#understanding-ownership)
+   1. [What Is Ownership?](#what-is-ownership)
+   2. [References and Borrowing](#references-and-borrowing)
+
+---
+
 # Common Programming Concepts
 
-### Variables and Mutability
+## Variables and Mutability
 
 ```rust
 fn main() {
@@ -81,38 +94,39 @@ fn main() {
 
 ### Compound Types
 
-- **Tuples**
+**Tuples**
 
-  A tuple is a general way of grouping together a number of values with a variety of types into one compound type.
-  Tuples have a fixed length: once declared, they cannot grow or shrink in size.
+A tuple is a general way of grouping together a number of values with a variety of types into one compound type.
+Tuples have a fixed length: once declared, they cannot grow or shrink in size.
 
-  ```rust
+```rust
    fn main() {
     let x: (i32, f64, u8) = (500, 6.4, 1);
     let five_hundred = x.0;
     let six_point_four = x.1;
     let one = x.2;
-   }
-    ```
-- **Arrays**
+}
+```
 
-  Another way to have a collection of multiple values is with an array. Unlike a tuple, every element of an array must
-  have the same type. Unlike arrays in some other languages, arrays in Rust have a fixed length.
+**Arrays**
 
-  ```rust
-  fn main() {
+Another way to have a collection of multiple values is with an array. Unlike a tuple, every element of an array must
+have the same type. Unlike arrays in some other languages, arrays in Rust have a fixed length.
+
+```rust
+fn main() {
     let a: [i32; 5] = [1, 2, 3, 4, 5];
-  }
-  ```
+}
+```
 
-  You can also initialize an array to contain the same value for each element by specifying the initial value, followed
-  by a semicolon, and then the length of the array in square brackets, as shown here:
+You can also initialize an array to contain the same value for each element by specifying the initial value, followed
+by a semicolon, and then the length of the array in square brackets, as shown here:
 
-  ```rust
-  fn main() {
+```rust
+fn main() {
     let a = [3; 5];
-  }
-  ```
+}
+```
 
 ## Functions
 
