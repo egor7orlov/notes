@@ -5,13 +5,13 @@
 ## Table of contents
 
 1. [Common Programming Concepts](#common-programming-concepts)
-   1. [Variables and Mutability](#variables-and-mutability)
-   2. [Data Types](#data-types)
-   3. [Functions](#functions)
-   4. [Control Flow](#control-flow)
+    1. [Variables and Mutability](#variables-and-mutability)
+    2. [Data Types](#data-types)
+    3. [Functions](#functions)
+    4. [Control Flow](#control-flow)
 2. [Understanding Ownership](#understanding-ownership)
-   1. [What Is Ownership?](#what-is-ownership)
-   2. [References and Borrowing](#references-and-borrowing)
+    1. [What Is Ownership?](#what-is-ownership)
+    2. [References and Borrowing](#references-and-borrowing)
 
 ---
 
@@ -200,7 +200,7 @@ statement, and it will then not return a value.
 
 Functions can return values to the code that calls them. We don’t name return values, but we must declare their type
 after an arrow (`->`). In Rust, the return value of the function is synonymous with the value of the final expression in
-the block of the body of a function. You can return early from a function by using the return keyword and specifying a
+the block of the body of a function. You can return early from a function by using the `return` keyword and specifying a
 value, but most functions return the last expression implicitly.
 
 ```rust
