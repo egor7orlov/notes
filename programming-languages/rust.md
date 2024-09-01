@@ -12,6 +12,15 @@
 2. [Understanding Ownership](#understanding-ownership)
     1. [What Is Ownership?](#what-is-ownership)
     2. [References and Borrowing](#references-and-borrowing)
+    3. [The Slice Type](#the-slice-type)
+3. [Using Structs to Structure Related Data](#using-structs-to-structure-related-data)
+    1. [Defining and Instantiating Structs](#defining-and-instantiating-structs)
+    2. [Method Syntax](#method-syntax)
+4. [Enums and Pattern Matching](#enums-and-pattern-matching)
+    1. [Defining an Enum](#defining-an-enum)
+    2. [The `match` Control Flow Construct](#the-match-control-flow-construct)
+    3. [Concise Control Flow with if let](#concise-control-flow-with-if-let)
+5. [Managing Growing Projects with Packages, Crates, and Modules](#managing-growing-projects-with-packages-crates-and-modules)
 
 ---
 
@@ -516,4 +525,541 @@ fn takes_and_gives_back(a_string: String) -> String { // a_string comes into sco
 
 ## References and Borrowing
 
+Here is how you would define and use a `calculate_length` function that has a reference to an object as a parameter
+instead of taking ownership of the value:
 
+```rust
+fn main() {
+    let s1 = String::from("hello");
+
+    let len = calculate_length(&s1);
+
+    println!("The length of '{s1}' is {len}.");
+}
+
+fn calculate_length(s: &String) -> usize { // `s` is a reference to a String
+    s.len()
+} // Here, `s` goes out of scope. But because it does not have ownership of what it refers to, it is not dropped.
+```
+
+Note that we pass `&s1` into `calculate_length` and, in its definition, we take `&String` rather than `String`. These
+ampersands represent _references_, and they allow you to refer to some value without taking ownership of it.
+
+> Note: The opposite of referencing by using & is dereferencing, which is accomplished with the dereference
+> operator, `*`.
+
+We call the action of creating a reference _borrowing_. As in real life, if a person owns something, you can borrow it
+from them. When you’re done, you have to give it back. You don’t own it.
+
+### Mutable References
+
+```rust
+fn main() {
+    let mut s = String::from("hello");
+
+    change(&mut s);
+}
+
+fn change(some_string: &mut String) {
+    some_string.push_str(", world");
+}
+```
+
+Mutable references have one big restriction: if you have a mutable reference to a value, you can have no other
+references to that value. This code that attempts to create two mutable references to `s` will fail:
+
+```rust
+fn main() {
+    let mut s = String::from("hello");
+
+    let r1 = &mut s;
+    let r2 = &mut s; // <-- error: second mutable borrow occurs here
+
+    println!("{}, {}", r1, r2);
+}
+```
+
+The restriction preventing multiple mutable references to the same data at the same time allows for mutation but in a
+very controlled fashion. The benefit of having this restriction is that Rust can prevent data races at compile time.
+
+As always, we can use curly brackets to create a new scope, allowing for multiple mutable references, just not
+simultaneous ones:
+
+```rust
+fn main() {
+    let mut s = String::from("hello");
+
+    {
+        let r1 = &mut s;
+    } // r1 goes out of scope here, so we can make a new reference with no problems.
+
+    let r2 = &mut s;
+}
+```
+
+Rust enforces a similar rule for combining mutable and immutable references. This code results in an error:
+
+```rust
+fn main() {
+    let mut s = String::from("hello");
+
+    let r1 = &s; // no problem
+    let r2 = &s; // no problem
+    let r3 = &mut s; // BIG PROBLEM
+
+    println!("{}, {}, and {}", r1, r2, r3);
+}
+```
+
+We also cannot have a mutable reference while we have an immutable one to the same value. Users of an immutable
+reference don’t expect the value to suddenly change out from under them! However, multiple immutable references are
+allowed because no one who is just reading the data has the ability to affect anyone else’s reading of the data.
+
+Note that a reference’s scope starts from where it is introduced and continues through the last time that reference is
+used. For instance, this code will compile because the last usage of the immutable references, the `println!`, occurs
+before the mutable reference is introduced:
+
+```rust
+fn main() {
+    let mut s = String::from("hello");
+
+    let r1 = &s; // no problem
+    let r2 = &s; // no problem
+    println!("{r1} and {r2}");
+    // variables r1 and r2 will not be used after this point
+
+    let r3 = &mut s; // no problem
+    println!("{r3}");
+}
+```
+
+### The Rules of References
+
+- At any given time, you can have either one mutable reference or any number of immutable references.
+- References must always be valid.
+
+## The Slice Type
+
+_Slices_ let you reference a contiguous sequence of elements in a collection rather than the whole collection. A slice
+is a kind of reference, so it does not have ownership.
+
+### String Slices
+
+A _string slice_ is a reference to part of a `String`, and it looks like this:
+
+```rust
+fn main() {
+    let s = String::from("hello world");
+
+    let hello = &s[0..5];
+    let world = &s[6..11];
+}
+```
+
+Recall that we talked about string literals being stored inside the binary. Now that we know about slices, we can
+properly understand string literals:
+
+```rust
+fn main() {
+    let s = "Hello, world!";
+}
+```
+
+The type of `s` here is `&str`: it’s a slice pointing to that specific point of the binary. This is also why string
+literals are immutable; `&str` is an immutable reference.
+
+### Other Slices
+
+Just as we might want to refer to part of a string, we might want to refer to part of an array. We’d do so like this:
+
+```rust
+fn main() {
+    let a = [1, 2, 3, 4, 5];
+
+    let slice = &a[1..3];
+
+    assert_eq!(slice, &[2, 3]);
+}
+```
+
+This slice has the type `&[i32]`. It works the same way as string slices do, by storing a reference to the first element
+and a length. You’ll use this kind of slice for all sorts of other collections.
+
+---
+
+# Using Structs to Structure Related Data
+
+## Defining and Instantiating Structs
+
+To define a struct, we enter the keyword `struct` and name the entire struct. A struct’s name should describe the
+significance of the pieces of data being grouped together. Then, inside curly brackets, we define the names and types of
+the pieces of data, which we call _fields_.
+
+```rust
+struct User {
+    active: bool,
+    username: String,
+    email: String,
+    sign_in_count: u64,
+}
+
+fn main() {
+    let user1 = User {
+        active: true,
+        username: String::from("someusername123"),
+        email: String::from("someone@example.com"),
+        sign_in_count: 1,
+    };
+}
+```
+
+To get a specific value from a struct, we use dot notation. If the instance is mutable, we can change a value by using
+the dot notation and assigning into a particular field. Note that the entire instance must be mutable; Rust doesn’t
+allow us to mark only certain fields as mutable.
+
+```rust
+fn main() {
+    let mut user1 = User {
+        active: true,
+        username: String::from("someusername123"),
+        email: String::from("someone@example.com"),
+        sign_in_count: 1,
+    };
+
+    user1.email = String::from("anotheremail@example.com");
+}
+```
+
+### Using the Field Init Shorthand
+
+Because the parameter names and the struct field names are exactly the same, we can use the _field init shorthand_
+syntax to rewrite `build_user` so it behaves exactly the same but doesn’t have the repetition of `username` and `email`.
+
+```rust
+fn build_user(email: String, username: String) -> User {
+    User {
+        active: true,
+        username,
+        email,
+        sign_in_count: 1,
+    }
+}
+```
+
+### Creating Instances from Other Instances with Struct Update Syntax
+
+It’s often useful to create a new instance of a struct that includes most of the values from another instance, but
+changes some. You can do this using struct _update syntax_.
+
+```rust
+fn main() {
+    let user2 = User {
+        email: String::from("another@example.com"),
+        ..user1
+    };
+}
+```
+
+The syntax `..` specifies that the remaining fields not explicitly set should have the same value as the fields in the
+given instance. The `..user1` must come last to specify that any remaining fields should get their values from the
+corresponding fields in `user1`.
+
+> **IMPORTANT!**
+>
+> In this example, we can no longer use `user1` as a whole after creating `user2` because the `String` in the `username`
+> field of `user1` was moved into `user2`. If we had given `user2` new `String` values for both `email` and `username`,
+> and thus only used the `active` and `sign_in_count` values from `user1`, then `user1` would still be valid after
+> creating `user2`. Both `active` and `sign_in_count` are types that implement the `Copy` trait.
+
+### Using Tuple Structs Without Named Fields to Create Different Types
+
+Rust also supports structs that look similar to tuples, called _tuple structs_. Tuple structs have the added meaning the
+struct name provides but don’t have names associated with their fields; rather, they just have the types of the fields.
+
+```rust
+struct Color(i32, i32, i32);
+struct Point(i32, i32, i32);
+
+fn main() {
+    let black = Color(0, 0, 0);
+    let origin = Point(0, 0, 0);
+}
+```
+
+### Unit-Like Structs Without Any Fields
+
+You can also define structs that don’t have any fields! These are called unit-like structs because they behave similarly
+to `()`. Unit-like structs can be useful when you need to implement a trait on some type but don’t have any data that
+you want to store in the type itself.
+
+```rust
+struct AlwaysEqual;
+
+fn main() {
+    let subject = AlwaysEqual;
+}
+```
+
+### Ownership of Struct Data
+
+It’s also possible for structs to store references to data owned by something else, but to do so requires the use of
+_lifetimes_. Lifetimes ensure that the data referenced by a struct is valid for as long as the struct is. Let’s say you
+try to store a reference in a struct without specifying lifetimes, like the following; this won’t work:
+
+```rust
+struct User {
+    active: bool,
+    username: &str,
+    email: &str,
+    sign_in_count: u64,
+}
+
+fn main() {
+    let user1 = User {
+        active: true,
+        username: "someusername123",
+        email: "someone@example.com",
+        sign_in_count: 1,
+    };
+}
+```
+
+## Method Syntax
+
+_Methods_ are similar to functions: we declare them with the `fn` keyword and a name, they can have parameters and a
+return value. Unlike functions, methods are defined within the context of a struct (or an enum or a trait object), and
+their first parameter is always self, which represents the instance of the struct the method is being called on.
+
+### Defining Methods
+
+```rust
+#[derive(Debug)]
+struct Rectangle {
+    width: u32,
+    height: u32,
+}
+
+impl Rectangle {
+    fn area(&self) -> u32 {
+        self.width * self.height
+    }
+}
+
+fn main() {
+    let rect1 = Rectangle {
+        width: 30,
+        height: 50,
+    };
+
+    println!(
+        "The area of the rectangle is {} square pixels.",
+        rect1.area()
+    );
+}
+```
+
+We need to use the `&` in front of the `self` shorthand to indicate that this method borrows the `Self` instance, just
+as we did in rectangle: `&Rectangle`. Methods can take ownership of `self`, borrow `self` immutably, as we’ve done here,
+or borrow `self` mutably, just as they can any other parameter.
+
+### Associated Functions
+
+All functions defined within an `impl` block are called associated functions because they’re associated with the type
+named after the `impl`. We can define associated functions that don’t have `self` as their first parameter (and thus are
+not methods) because they don’t need an instance of the type to work with. We’ve already used one function like this:
+the `String::from` function that’s defined on the `String` type.
+
+```rust
+impl Rectangle {
+    fn square(size: u32) -> Self {
+        Self {
+            width: size,
+            height: size,
+        }
+    }
+}
+```
+
+---
+
+# Enums and Pattern Matching
+
+## Defining an Enum
+
+```rust
+enum IpAddrKind {
+    V4,
+    V6,
+}
+```
+
+We can create instances of each of the two variants of `IpAddrKind` like this:
+
+```rust
+fn main() {
+    let four = IpAddrKind::V4;
+    let six = IpAddrKind::V6;
+}
+```
+
+We can put data directly into each enum variant. Each variant can have different types and amounts of associated data.
+Just as we’re able to define methods on structs using `impl`, we’re also able to define methods on enums.
+
+```rust
+struct Point {
+    x: i32,
+    y: i32,
+}
+
+enum Message {
+    Quit,
+    Move { x: i32, y: i32 },
+    MovePoint(Point),
+    Write(String),
+    ChangeColor(i32, i32, i32),
+}
+
+impl Message {
+    fn call(&self) {
+        // method body would be defined here
+    }
+}
+
+fn main() {
+    let quit = Message::Quit;
+    let move_to = Message::Move { x: 1, y: 2 };
+    let move_to_point = Message::MovePoint(Point { x: 1, y: 2 });
+    let write = Message::Write("Hello!".to_string());
+    let change_color = Message::ChangeColor(1, 2, 3);
+}
+```
+
+### The `Option` Enum and Its Advantages Over Null Values
+
+Rust does not have nulls, but it does have an enum that can encode the concept of a value being present or absent. This
+enum is `Option<T>`.
+
+```rust
+enum Option<T> {
+    None,
+    Some(T),
+}
+
+fn main() {
+    let some_number = Some(5);
+    let some_char = Some('e');
+    let absent_number: Option<i32> = None;
+}
+```
+
+## The `match` Control Flow Construct
+
+```rust
+enum Coin {
+    Penny,
+    Nickel,
+    Dime,
+    Quarter,
+}
+
+fn value_in_cents(coin: Coin) -> u8 {
+    match coin {
+        Coin::Penny => {
+            println!("Lucky penny!");
+            1
+        }
+        Coin::Nickel => 5,
+        Coin::Dime => 10,
+        Coin::Quarter => 25,
+    }
+}
+```
+
+Another useful feature of match arms is that they can bind to the parts of the values that match the pattern. This is
+how we can extract values out of enum variants. The arms’ patterns must cover all possibilities.
+
+```rust
+fn plus_one(x: Option<i32>) -> Option<i32> {
+    match x {
+        None => None,
+        Some(i) => Some(i + 1),
+    }
+}
+
+fn main() {
+    let five = Some(5);
+    let six = plus_one(five);
+    let none = plus_one(None);
+}
+```
+
+Using enums, we can also take special actions for a few particular values, but for all other values take one default
+action. This code compiles, even though we haven’t listed all the possible values a `u8` can have, because the last
+pattern will match all values not specifically listed.
+
+```rust
+fn add_fancy_hat() {}
+fn remove_fancy_hat() {}
+fn move_player(num_spaces: u8) {}
+
+fn main() {
+    let dice_roll = 9;
+    match dice_roll {
+        3 => add_fancy_hat(),
+        7 => remove_fancy_hat(),
+        other => move_player(other),
+    }
+}
+```
+
+Rust also has a pattern we can use when we want a catch-all but don’t want to use the value in the catch-all
+pattern: `_` is a special pattern that matches any value and does not bind to that value. This tells Rust we aren’t
+going to use the value, so Rust won’t warn us about an unused variable.
+
+```rust
+fn add_fancy_hat() {}
+fn remove_fancy_hat() {}
+fn reroll() {}
+
+fn main() {
+    let dice_roll = 9;
+    match dice_roll {
+        3 => add_fancy_hat(),
+        7 => remove_fancy_hat(),
+        _ => reroll(),
+    }
+}
+```
+
+## Concise Control Flow with if let
+
+The `if let` syntax lets you combine `if` and `let` into a less verbose way to handle values that match one pattern
+while ignoring the rest.
+
+Consider the program that matches on an `Option<u8>` value in the `config_max` variable but only wants to execute code
+if the value is the `Some` variant.
+
+```rust
+fn main() {
+    let config_max = Some(3u8);
+    match config_max {
+        Some(max) => println!("The maximum is configured to be {max}"),
+        _ => (),
+    }
+}
+```
+
+Instead, we could write this in a shorter way using `if let`.
+
+```rust
+fn main() {
+    let config_max = Some(3u8);
+    if let Some(max) = config_max {
+        println!("The maximum is configured to be {max}");
+    }
+}
+```
+
+---
+
+# Managing Growing Projects with Packages, Crates, and Modules
