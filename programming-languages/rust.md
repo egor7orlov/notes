@@ -21,6 +21,7 @@
     2. [The `match` Control Flow Construct](#the-match-control-flow-construct)
     3. [Concise Control Flow with if let](#concise-control-flow-with-if-let)
 5. [Managing Growing Projects with Packages, Crates, and Modules](#managing-growing-projects-with-packages-crates-and-modules)
+    1. [Defining Modules to Control Scope and Privacy](#defining-modules-to-control-scope-and-privacy)
 
 ---
 
@@ -1063,3 +1064,46 @@ fn main() {
 ---
 
 # Managing Growing Projects with Packages, Crates, and Modules
+
+Rust has a number of features that allow you to manage your code’s organization, including which details are exposed,
+which details are private, and what names are in each scope in your programs. These features, sometimes collectively
+referred to as the _module system_, include:
+
+- **Packages:** A Cargo feature that lets you build, test, and share crates
+- **Crates:** A tree of modules that produces a library or executable
+- **Modules** and **use:** Let you control the organization, scope, and privacy of paths
+- **Paths:** A way of naming an item, such as a struct, function, or module
+
+A _crate_ is the smallest amount of code that the Rust compiler considers at a time. Even if you run `rustc` rather
+than `cargo` and pass a single source code file, the compiler considers that file to be a crate. Crates can contain
+modules, and the modules may be defined in other files that get compiled with the crate.
+
+A crate can come in one of two forms: a **binary** crate or a **library** crate.
+
+## Defining Modules to Control Scope and Privacy
+
+### Modules Cheat Sheet
+
+- **Start from the crate root:** When compiling a crate, the compiler first looks in the crate root file (
+  usually `src/lib.rs` for a library crate or `src/main.rs` for a binary crate) for code to compile.
+- **Declaring modules:** In the crate root file, you can declare new modules; say you declare a “garden” module
+  with `mod garden;`. The compiler will look for the module’s code in these places:
+    - Inline, within curly brackets that replace the semicolon following `mod garden`
+    - In the file `src/garden.rs`
+    - In the file `src/garden/mod.rs`
+- **Declaring submodules:** In any file other than the crate root, you can declare submodules. For example, you might
+  declare mod `vegetables`; in `src/garden.rs`. The compiler will look for the submodule’s code within the directory
+  named for the parent module in these places:
+    - Inline, directly following `mod vegetables`, within curly brackets instead of the semicolon
+    - In the file `src/garden/vegetables.rs`
+    - In the file `src/garden/vegetables/mod.rs`
+- **Paths to code in modules:** Once a module is part of your crate, you can refer to code in that module from anywhere
+  else in that same crate, as long as the privacy rules allow, using the path to the code. For example, an `Asparagus`
+  type in the garden vegetables module would be found at `crate::garden::vegetables::Asparagus`.
+- **Private vs. public:** Code within a module is private from its parent modules by default. To make a module public,
+  declare it with `pub mod` instead of `mod`. To make items within a public module public as well, use `pub` before
+  their declarations.
+- **The `use` keyword:** Within a scope, the `use` keyword creates shortcuts to items to reduce repetition of long
+  paths. In any scope that can refer to `crate::garden::vegetables::Asparagus`, you can create a shortcut
+  with `use crate::garden::vegetables::Asparagus;` and from then on you only need to write `Asparagus` to make use of
+  that type in the scope.
