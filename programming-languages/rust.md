@@ -22,6 +22,9 @@
     3. [Concise Control Flow with if let](#concise-control-flow-with-if-let)
 5. [Managing Growing Projects with Packages, Crates, and Modules](#managing-growing-projects-with-packages-crates-and-modules)
     1. [Defining Modules to Control Scope and Privacy](#defining-modules-to-control-scope-and-privacy)
+6. [Common Collections](#common-collections)
+    1. [Storing Lists of Values with Vectors](#storing-lists-of-values-with-vectors)
+    2. [Storing UTF-8 Encoded Text with Strings](#storing-utf-8-encoded-text-with-strings)
 
 ---
 
@@ -1107,3 +1110,95 @@ A crate can come in one of two forms: a **binary** crate or a **library** crate.
   paths. In any scope that can refer to `crate::garden::vegetables::Asparagus`, you can create a shortcut
   with `use crate::garden::vegetables::Asparagus;` and from then on you only need to write `Asparagus` to make use of
   that type in the scope.
+
+---
+
+# Common Collections
+
+## Storing Lists of Values with Vectors
+
+```rust
+fn main() {
+    let v: Vec<i32> = Vec::new();
+    let v = vec![1, 2, 3];
+}
+```
+
+### Updating a Vector
+
+```rust
+fn main() {
+    let mut v = Vec::new();
+    v.push(5);
+    v.push(4);
+}
+```
+
+### Reading Elements of Vectors
+
+```rust
+fn main() {
+    let v = vec![1, 2, 3, 4, 5];
+
+    let third: &i32 = &v[2];
+    println!("The third element is {third}");
+
+    let third: Option<&i32> = v.get(2);
+    match third {
+        Some(third) => println!("The third element is {third}"),
+        None => println!("There is no third element."),
+    }
+}
+```
+
+### Iterating Over the Values in a Vector
+
+```rust
+fn main() {
+    let v = vec![100, 32, 57];
+    for i in &v {
+        println!("{i}");
+    }
+
+    let mut v = vec![100, 32, 57];
+    for i in &mut v {
+        *i += 50;
+    }
+}
+```
+
+### Using an Enum to Store Multiple Types
+
+```rust
+enum SpreadsheetCell {
+    Int(i32),
+    Float(f64),
+    Text(String),
+}
+
+fn main() {
+    let row = vec![
+        SpreadsheetCell::Int(3),
+        SpreadsheetCell::Text(String::from("blue")),
+        SpreadsheetCell::Float(10.12),
+    ];
+}
+```
+
+### Dropping a Vector Drops Its Elements
+
+Like any other struct, a vector is freed when it goes out of scope. When the vector gets dropped, all of its contents
+are also dropped, meaning the integers it holds will be cleaned up. The borrow checker ensures that any references to
+contents of a vector are only used while the vector itself is valid.
+
+```rust
+fn main() {
+    {
+        let v = vec![1, 2, 3, 4];
+
+        // do stuff with v
+    } // <- v goes out of scope and is freed here
+}
+```
+
+## Storing UTF-8 Encoded Text with Strings
