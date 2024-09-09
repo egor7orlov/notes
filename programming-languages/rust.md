@@ -28,6 +28,8 @@
     3. [Storing Keys with Associated Values in Hash Maps](#storing-keys-with-associated-values-in-hash-maps)
 7. [Error Handling](#error-handling)
     1. [Unrecoverable Errors with `panic!`](#unrecoverable-errors-with-panic)
+    2. [Recoverable Errors with `Result`](#recoverable-errors-with-result)
+8. [Generic Types, Traits, and Lifetimes](#generic-types-traits-and-lifetimes)
 
 ---
 
@@ -1422,3 +1424,102 @@ Rust doesn’t have exceptions. Instead, it has the type `Result<T, E>` for reco
 stops execution when the program encounters an unrecoverable error.
 
 ## Unrecoverable Errors with panic!
+
+> #### Unwinding the Stack or Aborting in Response to a Panic
+> By default, when a panic occurs the program starts _unwinding_, which means Rust walks back up the stack and cleans up
+> the data from each function it encounters. However, walking back and cleaning up is a lot of work. Rust, therefore,
+> allows you to choose the alternative of immediately _aborting_, which ends the program without cleaning up. Memory
+> that
+> the program was using will then need to be cleaned up by the operating system. If in your project you need to make the
+> resultant binary as small as possible, you can switch from unwinding to aborting upon a panic by
+> adding `panic = 'abort'` to the appropriate `[profile]` sections in your Cargo.toml file. For example, if you want to
+> abort on panic in release mode, add this:
+>
+> ```toml
+> [profile.release]
+> panic = 'abort'
+> ```
+
+## Recoverable Errors with Result
+
+```rust
+use std::fs::File;
+
+fn main() {
+    let greeting_file_result = File::open("hello.txt");
+
+    let greeting_file = match greeting_file_result {
+        Ok(file) => file,
+        Err(error) => panic!("Problem opening the file: {error:?}"),
+    };
+}
+```
+
+### Shortcuts for Panic on Error: unwrap and expect
+
+Using `match` works well enough, but it can be a bit verbose and doesn’t always communicate intent well. The `unwrap`
+method is a shortcut method implemented just like the `match` expression in the code snippet above.
+
+```rust
+use std::fs::File;
+
+fn main() {
+    let greeting_file = File::open("hello.txt").unwrap(); // just panics on `Err`
+    let greeting_file = File::open("hello.txt")
+        .expect("hello.txt should be included in this project"); // panics on `Err` with a custom message
+}
+```
+
+### Propagating Errors
+
+When a function’s implementation calls something that might fail, instead of handling the error within the function
+itself you can return the error to the calling code so that it can decide what to do. This is known as _propagating_ the
+error and gives more control to the calling code, where there might be more information or logic that dictates how the
+error should be handled than what you have available in the context of your code.
+
+```rust
+use std::fs::File;
+use std::io::{self, Read};
+
+fn read_username_from_file() -> Result<String, io::Error> {
+    let username_file_result = File::open("hello.txt");
+
+    let mut username_file = match username_file_result {
+        Ok(file) => file,
+        Err(e) => return Err(e),
+    };
+
+    let mut username = String::new();
+
+    match username_file.read_to_string(&mut username) {
+        Ok(_) => Ok(username),
+        Err(e) => Err(e),
+    }
+}
+```
+
+The `?` placed after a `Result` value is defined to work in almost the same way as the `match` expressions we defined to
+handle the `Result` values above. If the value of the `Result` is an `Ok`, the value inside the `Ok` will get returned
+from this expression, and the program will continue. If the value is an `Err`, the `Err` will be returned from the whole
+function as if we had used the `return` keyword so the error value gets propagated to the calling code.
+
+```rust
+use std::fs::File;
+use std::io::{self, Read};
+
+fn read_username_from_file() -> Result<String, io::Error> {
+    let mut username_file = File::open("hello.txt")?;
+    let mut username = String::new();
+    username_file.read_to_string(&mut username)?;
+    Ok(username)
+}
+```
+
+> As with using `?` on `Result`, you can only use `?` on `Option` in a function that returns an `Option`. The behavior
+> of the `?` operator when called on an `Option<T>` is similar to its behavior when called on a `Result<T, E>`: if the
+> value is `None`, the `None` will be returned early from the function at that point. If the value is `Some`, the value
+> inside the `Some` is the resultant value of the expression, and the function continues.
+
+---
+
+# Generic Types, Traits, and Lifetimes
