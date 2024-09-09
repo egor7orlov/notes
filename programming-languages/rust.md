@@ -25,6 +25,9 @@
 6. [Common Collections](#common-collections)
     1. [Storing Lists of Values with Vectors](#storing-lists-of-values-with-vectors)
     2. [Storing UTF-8 Encoded Text with Strings](#storing-utf-8-encoded-text-with-strings)
+    3. [Storing Keys with Associated Values in Hash Maps](#storing-keys-with-associated-values-in-hash-maps)
+7. [Error Handling](#error-handling)
+    1. [Unrecoverable Errors with `panic!`](#unrecoverable-errors-with-panic)
 
 ---
 
@@ -1202,3 +1205,220 @@ fn main() {
 ```
 
 ## Storing UTF-8 Encoded Text with Strings
+
+```rust
+fn main() {
+    let s1 = String::new();
+    let s2 = "initial contents".to_string();
+    let s3 = String::from("initial contents");
+}
+```
+
+### Updating a String
+
+We can grow a `String` by using the `push_str` method to append a string slice. After these two lines, `s` will
+contain `foobar`. The `push_str` method takes a string slice because we don’t necessarily want to take ownership of the
+parameter.
+
+```rust
+fn main() {
+    let mut s1 = String::from("foo");
+    let s2 = "bar";
+    s1.push_str(s2);
+    println!("s2 is {s2}");
+}
+```
+
+The `push` method takes a single character as a parameter and adds it to the `String`.
+
+```rust
+fn main() {
+    let mut s = String::from("lo");
+    s.push('l');
+}
+```
+
+### Concatenation with the + Operator or the format! Macro
+
+```rust
+fn main() {
+    let s1 = String::from("Hello, ");
+    let s2 = String::from("world!");
+    let s3 = s1 + &s2; // note s1 has been moved here and can no longer be used
+}
+```
+
+The string `s3` will contain `Hello, world!`. The reason `s1` is no longer valid after the addition, and the reason we
+used a reference to `s2`, has to do with the signature of the method that’s called when we use the `+` operator. The `+`
+operator uses the `add` method, whose signature looks something like this:
+
+```rust
+impl String {
+    fn add(self, s: &str) -> String {}
+}
+```
+
+For combining strings in more complicated ways, we can instead use the `format!` macro:
+
+```rust
+fn main() {
+    let s1 = String::from("tic");
+    let s2 = String::from("tac");
+    let s3 = String::from("toe");
+    let s = format!("{s1}-{s2}-{s3}");
+}
+```
+
+### Methods for Iterating Over Strings
+
+The best way to operate on pieces of strings is to be explicit about whether you want characters or bytes.
+
+```rust
+fn main() {
+    for c in "Зд".chars() {
+        println!("{c}"); // prints the characters: З, д
+    }
+
+    for b in "Зд".bytes() {
+        println!("{b}"); // prints the raw bytes: 208, 151, 208, 180
+    }
+}
+```
+
+## Storing Keys with Associated Values in Hash Maps
+
+By default, `HashMap` uses a hashing function called _SipHash_ that can provide resistance to denial-of-service (DoS)
+attacks involving hash tables. This is not the fastest hashing algorithm available, but the trade-off for better
+security that comes with the drop in performance is worth it. If you profile your code and find that the default hash
+function is too slow for your purposes, you can switch to another function by specifying a different hasher.
+
+### Creating a New Hash Map
+
+```rust
+use std::collections::HashMap;
+
+fn main() {
+    let mut scores = HashMap::new();
+
+    scores.insert(String::from("Blue"), 10);
+    scores.insert(String::from("Yellow"), 50);
+}
+```
+
+### Accessing Values in a Hash Map
+
+```rust
+use std::collections::HashMap;
+
+fn main() {
+    let mut scores = HashMap::new();
+
+    scores.insert(String::from("Blue"), 10);
+    scores.insert(String::from("Yellow"), 50);
+
+    let team_name = String::from("Blue");
+    let score = scores.get(&team_name) // `get` method returns an `Option<&V>`
+        .copied() // calling `copied` to get an `Option<i32>` rather than an `Option<&i32>`
+        .unwrap_or(0); // `unwrap_or` to set score to zero if scores doesn’t have an entry for the key
+}    
+```
+
+We can iterate over each key–value pair in a hash map in a similar manner as we do with vectors, using a `for` loop
+(this code will print each pair in an arbitrary order):
+
+```rust
+use std::collections::HashMap;
+
+fn main() {
+    let mut scores = HashMap::new();
+
+    scores.insert(String::from("Blue"), 10);
+    scores.insert(String::from("Yellow"), 50);
+
+    for (key, value) in &scores {
+        println!("{key}: {value}");
+    }
+}
+```
+
+### Hash Maps and Ownership
+
+For types that implement the `Copy` trait, like `i32`, the values are copied into the hash map. For owned values
+like `String`, the values will be moved and the hash map will be the owner of those values.
+
+```rust
+use std::collections::HashMap;
+
+fn main() {
+    let field_name = String::from("Favorite color");
+    let field_value = String::from("Blue");
+
+    let mut map = HashMap::new();
+    map.insert(field_name, field_value);
+    // field_name and field_value are invalid at this point, try using them and
+    // see what compiler error you get!
+}
+```
+
+### Updating a Hash Map
+
+#### Overwriting a Value
+
+```rust
+use std::collections::HashMap;
+
+fn main() {
+    let mut scores = HashMap::new();
+
+    scores.insert(String::from("Blue"), 10);
+    scores.insert(String::from("Blue"), 25);
+
+    println!("{scores:?}"); // {"Blue": 25}
+}
+```
+
+#### Adding a Key and Value Only If a Key Isn’t Present
+
+```rust
+use std::collections::HashMap;
+
+fn main() {
+    let mut scores = HashMap::new();
+    scores.insert(String::from("Blue"), 10);
+
+    scores.entry(String::from("Yellow")).or_insert(50);
+    scores.entry(String::from("Blue")).or_insert(50);
+
+    println!("{scores:?}"); // {"Yellow": 50, "Blue": 10}
+}
+```
+
+#### Updating a Value Based on the Old Value
+
+```rust
+use std::collections::HashMap;
+
+fn main() {
+    let text = "hello world wonderful world";
+
+    let mut map = HashMap::new();
+
+    for word in text.split_whitespace() {
+        let count = map.entry(word).or_insert(0); // `or_insert` method returns a mutable reference (`&mut V`) to the value for the specified key
+        *count += 1;
+    }
+
+    println!("{map:?}");
+}
+```
+
+---
+
+# Error Handling
+
+Rust groups errors into two major categories: _recoverable_ and _unrecoverable_ errors.
+
+Rust doesn’t have exceptions. Instead, it has the type `Result<T, E>` for recoverable errors and the `panic!` macro that
+stops execution when the program encounters an unrecoverable error.
+
+## Unrecoverable Errors with panic!
