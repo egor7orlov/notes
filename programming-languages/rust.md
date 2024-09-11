@@ -30,6 +30,12 @@
     1. [Unrecoverable Errors with `panic!`](#unrecoverable-errors-with-panic)
     2. [Recoverable Errors with `Result`](#recoverable-errors-with-result)
 8. [Generic Types, Traits, and Lifetimes](#generic-types-traits-and-lifetimes)
+    1. [Traits: Defining Shared Behavior](#traits-defining-shared-behavior)
+    2. [Validating References with Lifetimes](#validating-references-with-lifetimes)
+9. [Writing Automated Tests](#writing-automated-tests)
+    1. [How to Write Tests](#how-to-write-tests)
+    2. [Controlling How Tests Are Run](#controlling-how-tests-are-run)
+    3. [Test Organization](#test-organization)
 
 ---
 
@@ -1523,3 +1529,218 @@ fn read_username_from_file() -> Result<String, io::Error> {
 ---
 
 # Generic Types, Traits, and Lifetimes
+
+## Traits: Defining Shared Behavior
+
+A _trait_ defines the functionality a particular type has and can share with other types. We can use traits to define
+shared behavior in an abstract way. We can use _trait bounds_ to specify that a generic type can be any type that has
+certain behavior.
+
+```rust
+pub trait Summary {
+    fn summarize(&self) -> String;
+
+    fn summarize_default_implementation(&self) -> String {
+        String::from("(Read more...)")
+    }
+}
+
+pub struct NewsArticle {
+    pub headline: String,
+    pub location: String,
+    pub author: String,
+    pub content: String,
+}
+
+impl Summary for NewsArticle {
+    fn summarize(&self) -> String {
+        format!("{}, by {} ({})", self.headline, self.author, self.location)
+    }
+}
+
+pub struct Tweet {
+    pub username: String,
+    pub content: String,
+    pub reply: bool,
+    pub retweet: bool,
+}
+
+impl Summary for Tweet {
+    fn summarize(&self) -> String {
+        format!("{}: {}", self.username, self.content)
+    }
+}
+```
+
+### Traits as Parameters
+
+```rust
+pub fn notify(item: &impl Summary) {
+    println!("Breaking news! {}", item.summarize());
+}
+```
+
+The `impl Trait` syntax works for straightforward cases but is actually syntax sugar for a longer form known as a trait
+bound; it looks like this:
+
+```rust
+pub fn notify<T: Summary>(item: &T) {
+    println!("Breaking news! {}", item.summarize());
+}
+```
+
+The `impl Trait` syntax is convenient and makes for more concise code in simple cases, while the fuller trait bound
+syntax can express more complexity in other cases.
+
+Using impl Trait is appropriate if we want this function to allow item1 and item2 to have different types (as long as
+both types implement Summary).
+
+```rust 
+pub fn notify(item1: &impl Summary, item2: &impl Summary) {}
+```
+
+The generic type `T` specified as the type of the `item1` and `item2` parameters constrains the function such that the
+concrete type of the value passed as an argument for `item1` and `item2` must be the same.
+
+```rust
+pub fn notify<T: Summary>(item1: &T, item2: &T) {}
+```
+
+We can also specify more than one trait bound.
+
+```rust
+pub fn notify(item: &(impl Summary + Display)) {}
+
+pub fn notify<T: Summary + Display>(item: &T) {}
+```
+
+### Clearer Trait Bounds with where Clauses\
+
+```rust
+fn some_function<T, U>(t: &T, u: &U) -> ()
+where
+    T: Display + Clone,
+    U: Clone + Debug,
+{}
+```
+
+### Returning Types that Implement Traits
+
+```rust
+fn returns_summarizable() -> impl Summary {
+    Tweet {
+        username: String::from("horse_ebooks"),
+        content: String::from(
+            "of course, as you probably already know, people",
+        ),
+        reply: false,
+        retweet: false,
+    }
+}
+```
+
+However, you can only use impl Trait if you’re returning a single type.
+
+## Validating References with Lifetimes
+
+Lifetimes are another kind of generic that we’ve already been using. Rather than ensuring that a type has the behavior
+we want, lifetimes ensure that references are valid as long as we need them to be.
+
+### Preventing Dangling References with Lifetimes
+
+The main aim of lifetimes is to prevent _dangling references_, which cause a program to reference data other than the
+data it’s intended to reference.
+
+```rust
+fn main() {
+    let r;                // ---------+-- 'a
+    {                     //          |
+        let x = 5;        // -+-- 'b  |
+        r = &x;           //  |       |
+    }                     // -+       |
+    println!("r: {r}");   //          |
+}                         // ---------+
+```
+
+### Lifetime Annotation Syntax
+
+Lifetime annotations don’t change how long references live. Rather, they describe the relationships of the lifetimes of
+multiple references to each other without affecting the lifetimes.
+
+```
+&i32        // a reference
+&'a i32     // a reference with an explicit lifetime
+&'a mut i32 // a mutable reference with an explicit lifetime
+```
+
+### Lifetime Annotations in Function Signatures
+
+We want the signature to express the following constraint: the returned reference will be valid as long as both the
+parameters are valid. This is the relationship between lifetimes of the parameters and the return value.
+
+```rust
+fn longest<'a>(x: &'a str, y: &'a str) -> &'a str {
+    if x.len() > y.len() {
+        x
+    } else {
+        y
+    }
+}
+```
+
+The way in which you need to specify lifetime parameters depends on what your function is doing. For example, if we
+changed the implementation of the `longest` function to always return the first parameter rather than the longest string
+slice, we wouldn’t need to specify a lifetime on the y parameter. The following code will compile:
+
+```rust
+fn longest<'a>(x: &'a str, y: &str) -> &'a str {
+    x
+}
+```
+
+When returning a reference from a function, the lifetime parameter for the return type needs to match the lifetime
+parameter for one of the parameters.
+
+```rust
+fn longest<'a>(x: &str, y: &str) -> &'a str {
+    let result = String::from("really long string");
+    result.as_str() // error: `result` does not live long enough
+} // `result` dropped here while still borrowed
+```
+
+Ultimately, lifetime syntax is about connecting the lifetimes of various parameters and return values of functions.
+
+### Lifetime Annotations in Struct Definitions
+
+```rust
+struct ImportantExcerpt<'a> {
+    part: &'a str,
+}
+
+fn main() {
+    let novel = String::from("Call me Ishmael. Some years ago...");
+    let first_sentence = novel.split('.').next().unwrap();
+    let i = ImportantExcerpt {
+        part: first_sentence,
+    };
+}
+```
+
+As with generic data types, we declare the name of the generic lifetime parameter inside angle brackets after the name
+of the struct so we can use the lifetime parameter in the body of the struct definition. This annotation means an
+instance of `ImportantExcerpt` can’t outlive the reference it holds in its `part` field.
+
+### The Static Lifetime
+
+One special lifetime we need to discuss is `'static`, which denotes that the affected reference can live for the entire
+duration of the program. All string literals have the `'static` lifetime, which we can annotate as follows:
+
+```rust
+fn main() {
+    let s: &'static str = "I have a static lifetime.";
+}
+```
+
+---
+
+# Writing Automated Tests
